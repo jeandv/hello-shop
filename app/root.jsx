@@ -1,4 +1,4 @@
-import {Analytics, getShopAnalytics, useNonce} from '@shopify/hydrogen';
+import {getShopAnalytics, useNonce} from '@shopify/hydrogen';
 import {
   Outlet,
   useRouteError,
@@ -7,13 +7,11 @@ import {
   Meta,
   Scripts,
   ScrollRestoration,
-  useRouteLoaderData,
 } from 'react-router';
-import favicon from '~/assets/favicon.svg';
 import {FOOTER_QUERY, HEADER_QUERY} from '~/lib/fragments';
 import resetStyles from '~/styles/reset.css?url';
 import appStyles from '~/styles/app.css?url';
-import {PageLayout} from './components/PageLayout';
+import {OutfitLayout} from '~/components/outfit/OutfitLayout';
 
 /**
  * This is important to avoid re-fetching root queries on sub-navigations
@@ -54,7 +52,7 @@ export function links() {
       rel: 'preconnect',
       href: 'https://shop.app',
     },
-    {rel: 'icon', type: 'image/svg+xml', href: favicon},
+    {rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg'},
   ];
 }
 
@@ -97,13 +95,20 @@ export async function loader(args) {
 async function loadCriticalData({context}) {
   const {storefront} = context;
 
+  // The OUTFIT replica runs on mock data, so a missing/unconfigured Shopify
+  // storefront must not 500 the whole app — swallow the error and move on.
   const [header] = await Promise.all([
-    storefront.query(HEADER_QUERY, {
-      cache: storefront.CacheLong(),
-      variables: {
-        headerMenuHandle: 'main-menu', // Adjust to your header menu handle
-      },
-    }),
+    storefront
+      .query(HEADER_QUERY, {
+        cache: storefront.CacheLong(),
+        variables: {
+          headerMenuHandle: 'main-menu', // Adjust to your header menu handle
+        },
+      })
+      .catch((error) => {
+        console.error(error);
+        return null;
+      }),
     // Add other queries here, so that they are loaded in parallel
   ]);
 
@@ -165,23 +170,13 @@ export function Layout({children}) {
 }
 
 export default function App() {
-  /** @type {RootLoader} */
-  const data = useRouteLoaderData('root');
-
-  if (!data) {
-    return <Outlet />;
-  }
-
+  // The OUTFIT replica is mock-driven, so the layout no longer depends on the
+  // Shopify root loader data. We keep the loader (for any remaining scaffold
+  // routes) but render our own shell here.
   return (
-    <Analytics.Provider
-      cart={data.cart}
-      shop={data.shop}
-      consent={data.consent}
-    >
-      <PageLayout {...data}>
-        <Outlet />
-      </PageLayout>
-    </Analytics.Provider>
+    <OutfitLayout>
+      <Outlet />
+    </OutfitLayout>
   );
 }
 

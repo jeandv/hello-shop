@@ -1,3 +1,43 @@
+@import 'tailwindcss';
+
+/*
+* ==================================================
+* OUTFIT® design system — Swiss / brutalist
+* ==================================================
+*/
+
+/* Theme tokens (flip via [data-theme] on <html>) */
+:root,
+[data-theme='light'] {
+  --bg: #ede4dd;
+  --fg: #0a0a0a;
+  --muted: #d2cac3;
+  --accent: #ff0001;
+}
+
+[data-theme='dark'] {
+  --bg: #0a0a0a;
+  --fg: #ede4dd;
+  --muted: #2b2b2b;
+  --accent: #ff0001;
+}
+
+[data-theme='red'] {
+  --bg: #ede4dd;
+  --fg: #ff0001;
+  --muted: #d2cac3;
+  --accent: #ff0001;
+}
+
+/* Expose theme vars as Tailwind color utilities (bg-bg, text-fg, border-muted, text-accent...) */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --font-grotesk: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
 :root {
   --aside-width: 400px;
   --cart-aside-summary-height-with-discount: 300px;
@@ -8,8 +48,56 @@
   --color-light: #fff;
 }
 
-img {
-  border-radius: 4px;
+html {
+  background: var(--bg);
+  font-family: var(--font-grotesk);
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.6s ease;
+}
+
+/* Color lives on <body> (the wrapper div re-applies it via text-fg). No
+* transition on `color`: a var()-driven color transition freezes the computed
+* value so descendants inherit a stale color. Background still transitions. */
+body {
+  color: var(--fg);
+}
+
+/* Reset.css forces `a { color: #000 }`; let links follow the theme instead. */
+a {
+  color: inherit;
+}
+
+/* Hide native cursor on devices that support a fine pointer (custom cursor takes over) */
+@media (hover: hover) and (pointer: fine) {
+  .outfit-cursor-active,
+  .outfit-cursor-active * {
+    cursor: none;
+  }
+}
+
+/* Per-route entrance animation (see RouteTransition) */
+@keyframes outfit-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-enter {
+  animation: outfit-page-enter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter {
+    animation: none;
+  }
+  html {
+    transition: none;
+  }
 }
 
 /*

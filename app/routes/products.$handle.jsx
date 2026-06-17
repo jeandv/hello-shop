@@ -1,243 +1,189 @@
-import {useLoaderData} from 'react-router';
-import {
-  getSelectedProductOptions,
-  Analytics,
-  useOptimisticVariant,
-  getProductOptions,
-  getAdjacentAndFirstAvailableVariants,
-  useSelectedOptionInUrlParam,
-} from '@shopify/hydrogen';
-import {ProductPrice} from '~/components/ProductPrice';
-import {ProductImage} from '~/components/ProductImage';
-import {ProductForm} from '~/components/ProductForm';
-import {redirectIfHandleIsLocalized} from '~/lib/redirect';
+import {useState} from 'react';
+import {Link, useLoaderData} from 'react-router';
+import {getProduct, formatPrice, SIZES, COLORS} from '~/data/outfit';
+import {useBag} from '~/components/outfit/BagProvider';
+import {Reveal} from '~/components/outfit/Reveal';
 
-/**
- * @type {Route.MetaFunction}
- */
 export const meta = ({data}) => {
-  return [
-    {title: `Hydrogen | ${data?.product.title ?? ''}`},
-    {
-      rel: 'canonical',
-      href: `/products/${data?.product.handle}`,
-    },
-  ];
+  const title = data?.product ? `${data.product.title} | OUTFIT®` : 'OUTFIT®';
+  return [{title}];
 };
 
-/**
- * @param {Route.LoaderArgs} args
- */
-export async function loader(args) {
-  // Start fetching non-critical data without blocking time to first byte
-  const deferredData = loadDeferredData(args);
-
-  // Await the critical data required to render initial state of the page
-  const criticalData = await loadCriticalData(args);
-
-  return {...deferredData, ...criticalData};
-}
-
-/**
- * Load data necessary for rendering content above the fold. This is the critical data
- * needed to render the page. If it's unavailable, the whole page should 400 or 500 error.
- * @param {Route.LoaderArgs}
- */
-async function loadCriticalData({context, params, request}) {
-  const {handle} = params;
-  const {storefront} = context;
-
-  if (!handle) {
-    throw new Error('Expected product handle to be defined');
+/** @param {import('./+types/products.$handle').Route.LoaderArgs} args */
+export async function loader({params}) {
+  const product = getProduct(params.handle);
+  if (!product) {
+    throw new Response('Product not found', {status: 404});
   }
-
-  const [{product}] = await Promise.all([
-    storefront.query(PRODUCT_QUERY, {
-      variables: {handle, selectedOptions: getSelectedProductOptions(request)},
-    }),
-    // Add other queries here, so that they are loaded in parallel
-  ]);
-
-  if (!product?.id) {
-    throw new Response(null, {status: 404});
-  }
-
-  // The API handle might be localized, so redirect to the localized handle
-  redirectIfHandleIsLocalized(request, {handle, data: product});
-
-  return {
-    product,
-  };
-}
-
-/**
- * Load data for rendering content below the fold. This data is deferred and will be
- * fetched after the initial page load. If it's unavailable, the page should still 200.
- * Make sure to not throw any errors here, as it will cause the page to 500.
- * @param {Route.LoaderArgs}
- */
-function loadDeferredData({context, params}) {
-  // Put any API calls that is not critical to be available on first page render
-  // For example: product reviews, product recommendations, social feeds.
-
-  return {};
+  return {product};
 }
 
 export default function Product() {
-  /** @type {LoaderReturnData} */
   const {product} = useLoaderData();
+  const {add} = useBag();
 
-  // Optimistically selects a variant with given available variant information
-  const selectedVariant = useOptimisticVariant(
-    product.selectedOrFirstAvailableVariant,
-    getAdjacentAndFirstAvailableVariants(product),
-  );
+  const [size, setSize] = useState('M');
+  const [color, setColor] = useState(COLORS[0]);
+  const [qty, setQty] = useState(1);
+  const [added, setAdded] = useState(false);
 
-  // Sets the search param to the selected variant without navigation
-  // only when no search params are set in the url
-  useSelectedOptionInUrlParam(selectedVariant.selectedOptions);
-
-  // Get the product options array
-  const productOptions = getProductOptions({
-    ...product,
-    selectedOrFirstAvailableVariant: selectedVariant,
-  });
-
-  const {title, descriptionHtml} = product;
+  function handleAdd() {
+    add(product, {size, color, qty});
+    setAdded(true);
+    setTimeout(() => setAdded(false), 1600);
+  }
 
   return (
-    <div className="product">
-      <ProductImage image={selectedVariant?.image} />
-      <div className="product-main">
-        <h1>{title}</h1>
-        <ProductPrice
-          price={selectedVariant?.price}
-          compareAtPrice={selectedVariant?.compareAtPrice}
-        />
-        <br />
-        <ProductForm
-          productOptions={productOptions}
-          selectedVariant={selectedVariant}
-        />
-        <br />
-        <br />
-        <p>
-          <strong>Description</strong>
-        </p>
-        <br />
-        <div dangerouslySetInnerHTML={{__html: descriptionHtml}} />
-        <br />
+    <div className="px-5 pt-24 md:px-8">
+      <Link
+        to="/"
+        data-cursor-label="Back"
+        className="mb-8 inline-block text-sm uppercase tracking-wider underline-offset-4 hover:underline"
+      >
+        ← Return to Shop
+      </Link>
+
+      <div className="grid grid-cols-1 gap-10 md:grid-cols-2 md:gap-16">
+        {/* Image */}
+        <Reveal y={20}>
+          <div className="aspect-[4/5] overflow-hidden bg-muted">
+            <img
+              src={product.image}
+              alt={product.title}
+              className="h-full w-full object-cover"
+            />
+          </div>
+        </Reveal>
+
+        {/* Detail (sticky on desktop) */}
+        <div className="md:sticky md:top-24 md:h-fit">
+          <div className="flex items-baseline justify-between border-b border-fg/15 pb-4">
+            <h1 className="text-4xl font-bold tracking-tighter md:text-5xl">
+              {product.title}
+            </h1>
+            <span className="text-xl tabular-nums">{formatPrice(product.price)}</span>
+          </div>
+
+          <p className="mt-6 max-w-[42ch] leading-relaxed">{product.description}</p>
+
+          {/* Color */}
+          <Fieldset legend="Color">
+            <div className="flex flex-wrap gap-2">
+              {COLORS.map((c) => (
+                <Option key={c} active={color === c} onClick={() => setColor(c)}>
+                  {c}
+                </Option>
+              ))}
+            </div>
+          </Fieldset>
+
+          {/* Size */}
+          <Fieldset legend="Size">
+            <div className="flex flex-wrap gap-2">
+              {SIZES.map((s) => (
+                <Option key={s} active={size === s} onClick={() => setSize(s)}>
+                  {s}
+                </Option>
+              ))}
+            </div>
+          </Fieldset>
+
+          {/* Quantity + Add */}
+          <div className="mt-8 flex items-stretch gap-3">
+            <div className="flex items-center border border-fg/30">
+              <Stepper label="Decrease quantity" onClick={() => setQty((q) => Math.max(1, q - 1))}>
+                −
+              </Stepper>
+              <span className="w-10 text-center tabular-nums">{qty}</span>
+              <Stepper label="Increase quantity" onClick={() => setQty((q) => q + 1)}>
+                +
+              </Stepper>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleAdd}
+              data-cursor="dot"
+              className="flex-1 border border-fg py-3 text-sm uppercase tracking-wider transition-colors hover:bg-fg hover:text-bg"
+            >
+              {added ? 'Added to Bag ✓' : 'Add to Bag'}
+            </button>
+          </div>
+
+          {/* Buy Now — primary checkout CTA. Placeholder for now (no href):
+              wire to the Shopify checkout once real variant IDs are available. */}
+          <button
+            type="button"
+            data-cursor="dot"
+            className="mt-3 w-full bg-fg py-3 text-sm uppercase tracking-wider text-bg transition-opacity hover:opacity-90"
+          >
+            Buy Now
+          </button>
+
+          <Link
+            to="/bag"
+            data-cursor="dot"
+            className="mt-4 inline-block text-xs uppercase tracking-wider opacity-60 underline-offset-4 hover:underline"
+          >
+            View Bag →
+          </Link>
+        </div>
       </div>
-      <Analytics.ProductView
-        data={{
-          products: [
-            {
-              id: product.id,
-              title: product.title,
-              price: selectedVariant?.price.amount || '0',
-              vendor: product.vendor,
-              variantId: selectedVariant?.id || '',
-              variantTitle: selectedVariant?.title || '',
-              quantity: 1,
-            },
-          ],
-        }}
-      />
     </div>
   );
 }
 
-const PRODUCT_VARIANT_FRAGMENT = `#graphql
-  fragment ProductVariant on ProductVariant {
-    availableForSale
-    compareAtPrice {
-      amount
-      currencyCode
-    }
-    id
-    image {
-      __typename
-      id
-      url
-      altText
-      width
-      height
-    }
-    price {
-      amount
-      currencyCode
-    }
-    product {
-      title
-      handle
-    }
-    selectedOptions {
-      name
-      value
-    }
-    sku
-    title
-    unitPrice {
-      amount
-      currencyCode
-    }
-  }
-`;
+function Fieldset({legend, children}) {
+  return (
+    <div className="mt-6">
+      <p className="mb-2 text-xs uppercase tracking-wider opacity-60">{legend}</p>
+      {children}
+    </div>
+  );
+}
 
-const PRODUCT_FRAGMENT = `#graphql
-  fragment Product on Product {
-    id
-    title
-    vendor
-    handle
-    descriptionHtml
-    description
-    encodedVariantExistence
-    encodedVariantAvailability
-    options {
-      name
-      optionValues {
-        name
-        firstSelectableVariant {
-          ...ProductVariant
-        }
-        swatch {
-          color
-          image {
-            previewImage {
-              url
-            }
-          }
-        }
-      }
-    }
-    selectedOrFirstAvailableVariant(selectedOptions: $selectedOptions, ignoreUnknownOptions: true, caseInsensitiveMatch: true) {
-      ...ProductVariant
-    }
-    adjacentVariants (selectedOptions: $selectedOptions) {
-      ...ProductVariant
-    }
-    seo {
-      description
-      title
-    }
-  }
-  ${PRODUCT_VARIANT_FRAGMENT}
-`;
+function Option({active, onClick, children}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-cursor="dot"
+      aria-pressed={active}
+      className={`min-w-11 border px-3 py-1.5 text-sm transition-colors ${
+        active ? 'border-fg bg-fg text-bg' : 'border-fg/30 hover:border-fg'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
 
-const PRODUCT_QUERY = `#graphql
-  query Product(
-    $country: CountryCode
-    $handle: String!
-    $language: LanguageCode
-    $selectedOptions: [SelectedOptionInput!]!
-  ) @inContext(country: $country, language: $language) {
-    product(handle: $handle) {
-      ...Product
-    }
-  }
-  ${PRODUCT_FRAGMENT}
-`;
+function Stepper({label, onClick, children}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      data-cursor="dot"
+      className="flex h-full w-10 items-center justify-center text-lg leading-none hover:bg-fg hover:text-bg"
+    >
+      {children}
+    </button>
+  );
+}
 
-/** @typedef {import('./+types/products.$handle').Route} Route */
-/** @typedef {ReturnType<typeof useLoaderData<typeof loader>>} LoaderReturnData */
+export function ErrorBoundary() {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-5 text-center">
+      <p className="text-6xl font-bold tracking-tighter">404</p>
+      <p className="opacity-70">That piece doesn&apos;t exist. Or it sold out of existence.</p>
+      <Link
+        to="/"
+        data-cursor-label="Back"
+        className="text-sm uppercase tracking-wider underline underline-offset-4"
+      >
+        ← Return to Shop
+      </Link>
+    </div>
+  );
+}
